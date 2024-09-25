@@ -1,0 +1,2 @@
+#        weight    minuslogpost              db              df           Bshot             SN0             SN2             SN4          omegam          sigma8   minuslogprior minuslogprior__0            chi2 chi2__likelihoods.mark_likelihood_lowk_Bshot.FSLikelihood
+              1        59.37829    -0.014313269     0.037782813       1756.0375      -1042.4208        4099.801       23.108926      0.31519187      0.80775533        59.36433         59.36433     0.027920786                                               0.027920786
