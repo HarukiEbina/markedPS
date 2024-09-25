@@ -1,0 +1,19 @@
+ -log(Like) = 64.5472753128232
+  chi-sq    = 129.0945506256464
+
+    8  -1.460363441e-02  db                                                                 db
+    9  1.044526488e-01   df                                                                 df
+   10  -1.404335420e+02  Bshot                                                              Bshot
+   11  -1.120442674e+04  SN0                                                                SN_0
+   12  2.887485780e+03   SN2                                                                SN_2
+   13  -4.793777931e+01  SN4                                                                SN_4
+
+    1  0.9649            ns                                                                 ns
+    2  67.36             H0                                                                 H0
+    3  0.02237           ombh2                                                              ombh2
+    4  0.12              omch2                                                              omch2
+    5  2.083e-09         As                                                                 A_\mathrm{s}
+
+    6  3.151918680e-01   omegam                                                             \Omega_\mathrm{m}
+    7  8.077553304e-01   sigma8                                                             \sigma_8
+   14  6.120180640e+00   chi2__likelihoods.mark_likelihood_lowk_matter_Bshot.FSLikelihood   \chi^2_{\rm likelihoods.mark\ likelihood\ lowk\ matter\ Bshot.FSLikelihood}

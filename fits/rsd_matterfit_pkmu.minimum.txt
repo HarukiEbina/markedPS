@@ -1,0 +1,2 @@
+#        weight    minuslogpost          alpha0          alpha2             SN2          omegam          sigma8              c1              c2              cs   minuslogprior minuslogprior__0            chi2 chi2__likelihoods.fs_likelihood_sim_pkmu.FSLikelihood
+              1       142.25902      0.50066198      -19.638121      -3884.9323      0.31519187      0.80775533               1               0               0       23.780436        23.780436       236.95718                                             236.95718

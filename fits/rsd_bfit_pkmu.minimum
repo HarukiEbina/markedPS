@@ -1,0 +1,23 @@
+ -log(Like) = 75.36791073130738
+  chi-sq    = 150.73582146261475
+
+    8  1.185442689e+00   b1                                                      (1+b_1)
+   10  -1.805004631e+00  b2                                                      b_2
+   12  5.143027060e-01   bs                                                      b_s
+   14  -3.955577766e-01  alpha0                                                  \alpha_0
+   15  6.603934396e+00   alpha2                                                  \alpha_2
+   16  3.508602185e+01   SN0                                                     SN_0
+   17  -4.717985015e+03  SN2                                                     SN_2
+
+    1  0.9649            ns                                                      ns
+    2  67.36             H0                                                      H0
+    3  0.02237           ombh2                                                   ombh2
+    4  0.12              omch2                                                   omch2
+    5  2.083e-09         As                                                      A_\mathrm{s}
+
+    6  3.151918680e-01   omegam                                                  \Omega_\mathrm{m}
+    7  8.077553304e-01   sigma8                                                  \sigma_8
+    9  1.185442689e+00   c1                                                      c1
+   11  -1.734359797e+00  c2                                                      c2
+   13  4.613190805e-01   cs                                                      cs
+   18  7.172556388e+01   chi2__likelihoods.fs_likelihood_sim_pkmu.FSLikelihood   \chi^2_{\rm likelihoods.fs\ likelihood\ sim\ pkmu.FSLikelihood}
