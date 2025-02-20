@@ -3,7 +3,6 @@ import numpy as np
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
 from scipy.special import factorial2,legendre,binom,gamma
-# from scipy.integrate import simps
 from scipy.integrate import simpson as simps
 from velocileptors.Utils.loginterp import loginterp
 
@@ -25,8 +24,10 @@ class mark:
     
     Based on the velocileptors EPT (https://github.com/sfschen/velocileptors/tree/master/velocileptors/EPT)
     
-    Default output with tables is (k,mu) array with mu_deg = 0,2,4
+    Default output with tables is (mu,k) array with mu_deg = 0,2,4
 
+    FFTLog is not implemented for M22B and M13B (the "three-point" terms). This is the current limiting factor in computation time
+    
     stoch functionality is deprecated
     '''
     
@@ -47,7 +48,6 @@ class mark:
         else:
             knw, pnw = k, pnw
             
-        # self.ept_nw = EPT( knw, pnw, kmin=kmin, kmax=kmax, nk = nk, third_order=True, **kw)
         self.ept_nw = self.rept.ept_nw
         
         self.beyond_gauss = self.ept.beyond_gauss
@@ -61,7 +61,6 @@ class mark:
         else:
             self.sigma_squared_bao = sbao
             
-        # FoG, sigma_squared_bao is sigma_FoG^2
         self.damp_exp = - 0.5 * self.kv**2 * self.sigma_squared_bao
         self.damp_fac = np.exp(self.damp_exp)
         
@@ -92,7 +91,6 @@ class mark:
         self.R = R
         
     def W_R(self,k,R=-1):
-        # return 1
         if R<0: R = self.R
         return np.exp(-(k**2*R**2)/2) 
     
@@ -558,8 +556,6 @@ class mark:
         # make nested list for result. shape(16,mu_pow)
         res = [[0 for _ in range(len(mu_pows))] for _ in range(16)]
         denom = (ks**2+ps**2-2*ks*ps*xs)
-        # denom[np.abs(denom)<1e-8] = 1e20
-        # denom[np.abs(denom)<1e-10] = 1e20
         if not stoch:
             if n==0:
                 # Z_1(k-p) Z_1(p) Z_2(p,k-p)
@@ -676,7 +672,7 @@ class mark:
         
         Nskip = self.Nskip
         
-        final_array = np.zeros((5,len(mu_pow),self.nk,len(p)))#,dtype='float32') #powers of mu
+        final_array = np.zeros((5,len(mu_pow),self.nk,len(p))) #powers of mu
 
         mu_pows = np.arange(np.max(mu_pow)+1)
 
@@ -919,7 +915,6 @@ class mark:
         if os.path.exists(tmp):
             with open(os.path.join(self.basedir, name, "integral22_W%s.json"%stoch_str)) as json_file:
                 data = json.load(json_file)
-                # self.integral22_W = np.array(data['table'])
                 self.integral22_W = np.array(data)
         else: 
             print('no integral22_W... computing')
