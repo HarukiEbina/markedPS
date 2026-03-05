@@ -89,6 +89,7 @@ class mark:
         self.damp_fac_p = np.exp(self.damp_exp)
         
         self.R = R
+        self.Nm_dict = None
         
     def W_R(self,k,R=-1):
         if R<0: R = self.R
@@ -232,6 +233,36 @@ class mark:
         lowk = np.array([db*self.plin*Cd*Cd2,df*self.plin*Cd*Cd2, np.zeros(self.kv.shape)])
     
         ret = MA + 2*(M13B+M13C) + M22B + M22C + SN + BSN + dof + lowk
+        # ret = MA + 2*(M13B+M13C) + M22B + M22C + SN + BSN + dof + self.leg2poly(lowk)
+
+        ret += stochastic
+        
+        if basis=='Polynomial':  return ret
+        return self.poly2leg(ret)
+    
+    def compute_b2p_power(self,pars,f,Cn=None,Cn2=None,basis='Legendre',mod_M13=0.):
+        # return the b2p redshift space power in polynomial basis
+        # just compute_power with no MA term
+        if Cn is None: Cn = self.Cn
+        b1, b2, bs, b3, alpha0, alpha2, alpha4, alpha6, sn, sn2, sn4,bshot, b0, nm0, nm2,db, df = pars
+        # higher point terms 
+        M13B = self.compute_table_power(pars,self.M13B_table,Cn,Cn2=Cn2)
+        M13C = self.compute_table_power(pars,self.M13C_table,Cn,Cn2=Cn2)
+        M22B = self.compute_table_power(pars,self.M22B_table,Cn,Cn2=Cn2)
+        M22C = self.compute_table_power(pars,self.M22C_table,Cn,Cn2=Cn2)
+        
+        SN = self.compute_table_power(pars,self.SN_table,Cn,Cn2=Cn2)
+        # BSN = self.compute_table_power(pars,f,self.B0_table,Cn,Cn2=Cn2)
+        BSN = self.combine_mark_params(Cn,b0* self.B0_table,Cn2=Cn2)
+        dof = self.compute_table_power(pars,self.Bshot_table,Cn,Cn2=Cn2)
+
+        stochastic = self.get_Nm_contr(pars,Cn=Cn,Cn2=Cn2)
+        Cd = self.Cd(self.kv,Cn=Cn)
+        Cd2 = self.Cd(self.kv,Cn=Cn2)
+        lowk = np.array([db*self.plin*Cd*Cd2,df*self.plin*Cd*Cd2, np.zeros(self.kv.shape)])
+
+        # ret = 2*(M13B+M13C) + M22B + M22C + SN + BSN + dof + lowk
+        ret = 2*(M13B+M13C)*(1+mod_M13) + M22B + M22C + SN + BSN + dof + lowk
         # ret = MA + 2*(M13B+M13C) + M22B + M22C + SN + BSN + dof + self.leg2poly(lowk)
 
         ret += stochastic
@@ -488,7 +519,7 @@ class mark:
         # b1^3, b1^4, b1^2 b2, b1^2 bs
         
         # make nested list for result. shape(12,mu_pow)
-        res = [[0 for _ in range(len(mu_pows))] for _ in range(5)]
+        res = [[0 for _ in range(len(mu_pows))] for _ in range(8)]
         
         denom = (ks**2+ps**2-2*ks*ps*xs)
         abb = (ks/ps+ps/ks)*xs
@@ -497,6 +528,7 @@ class mark:
             if n==0:
                 res[2][0] += 1/14*(10-7*abb+4*xs**2) # b1^2
                 res[4][0] += 1/2 # b1 b2
+                res[7][0] += (xs**2-1/3)   # b1bs
 
                 res[1][2] += f/14*(ks**2*(6-7*abb+8*xs**2)/denom) # b1
                 res[2][2] += f/2 # b1^2
@@ -507,11 +539,13 @@ class mark:
                 res[1][3] += -f**2*ks/(2*ps) # b1
             elif n==2:
                 res[1][0] += f/2*(2*(5/7-1/2*abb+2*xs**2/7)+ps**2*(6-7*abb+8*xs**2)/(7*denom)) # b1
+                # res[1][0] += f/14*((10-7*abb+4*xs**2)+ps**2*(6-7*abb+8*xs**2)/(denom)) # b1
                 res[2][0] += f/2 # b1^2
                 res[3][0] += f/2 # b2
+                res[6][0] += f*(xs**2-1/3) # bs
 
                 res[0][2] += f**2/14*ks**2*(6-7*abb+8*xs**2)/denom # 1
-                res[1][2] += f**2/14*21 # b1
+                res[1][2] += f**2/2*3 # b1
             elif n==3:
                 res[0][1] += f**2/7*(7*ks**2*xs+7*ps**2*xs-2*ks*ps*(3+4*xs**2))/denom # 1
                 res[1][1] += f**2/14*(-7*ks/ps-14*ps/ks) # b1
@@ -561,9 +595,11 @@ class mark:
                 # Z_1(k-p) Z_1(p) Z_2(p,k-p)
                 res[12][0] = 1/14*ks**2* (7*ks*xs/ps + 3-10*xs**2 )/denom # b1^3 
                 res[14][0] = 1/2 # b1^2 b2
+                res[15][0] = (4*ps**2+2*ks*(-4*ps*xs+ks*(3*xs**2-1)))/(6*denom) # b1^2 bs
 
                 res[2][2] = f/14/ps*ks**2*(14*ks**3*xs + ks**2*ps*(2-30*xs**2)+3*ks*ps**2*xs*(3+4*xs**2) - ps**3*(1+6*xs**2))/denom**2 # b1^2 
                 res[4][2] = f/14/ps*ks**2* 7*ps /denom # b1 b2
+                res[7][2] = f*ks**2/6/denom**2 * (4*ps**2+2*ks*(-4*ps*xs+ks*(3*xs**2-1))) # b1 bs
                 res[12][2] = f/14/ps*ks**2* 7*ps /denom # b1^3
 
                 res[1][4] = f**2*ks**4/14*(7*ks*xs/ps -1 - 6*xs**2 )/denom**2 # b1
@@ -571,35 +607,41 @@ class mark:
             elif n==1:
                 res[2][1] += f*ks/14/ps *-2*ks**2*ps*(7*ks*xs+ps*(3-10*xs**2) )/denom**2 # b1^2 
                 res[4][1] += f*ks/14/ps *-14*ps**2/denom # b1 b2
+                res[7][1] += f*ks/3 * -1 * ps*(4*ps**2+2*ks*(-4*ps*xs+ks*(3*xs**2-1)))/denom**2 # b1bs
                 res[12][1] += f*ks/14/ps *7*ks*(ks-2*ps*xs)/denom # b1^3
 
                 res[1][3] += f**2*ks**3/14/ps *2*ps*(ps-7*ks*xs+6*ps*xs**2)/denom**2 # b1
                 res[2][3] += f**2*ks**3 /14/ps *-7*(-2*ks**2+ps**2+4*ks*ps*xs )/denom**2 # b1^2
 
-                # res[0,:,5] += f**3*ks**5/(2*ps*denom**2) # b1
+                #
+                # res[0][5] += f**3*ks**5/(2*ps*denom**2) # b1
             elif n==2:
                 res[2][0] += f/14/ps*(ks**2+2*ps**2-2*ks*ps*xs) *ks**2*(7*ks*xs +ps*(3-10*xs**2) )/denom**2 # b1^2 
                 res[4][0] += f/14/ps*(ks**2+2*ps**2-2*ks*ps*xs) *7*ps/denom # b1 b2 
+                res[7][0] += f/6*(ks**2+2*ps**2-2*ks*ps*xs) *(4*ps**2+2*ks*(-4*ps*xs+ks*(3*xs**2-1)))/denom**2 # b1 bs
 
                 res[1][2] += f**2* ks**2 /14/ps *2*(7*ks**3*xs + 2*ks*ps**2*xs*(4+3*xs**2) - ps**3*(1+6*xs**2) + ks**2 *(ps-15*ps*xs**2)) /denom**2 # b1
                 res[2][2] += f**2* ks**2 /14/ps *7*ps*(-2*ks**2+ps**2+4*ks*ps*xs)/denom**2 # b1^2
                 res[3][2] += f**2* ks**2 /14/ps *7*ps/denom # b2
+                res[6][2] += f**2* ks**2 /6 * (4*ps**2+2*ks*(-4*ps*xs+ks*(3*xs**2-1)))/denom**2 # bs
 
-                res[0][4] += f**3*ks**4/14/ps*(ps-7*ks*xs+6*ps*xs**2)/denom**2 # 1
-                res[1][4] += f**3*ks**4/denom**2 # b1
+                res[0][4] += -f**3*ks**4/14/ps*(ps-7*ks*xs+6*ps*xs**2)/denom**2 # 1
+                res[1][4] += -f**3*ks**4/denom**2 # b1
             elif n==3:
                 res[1][1] += f**2*ks/14/ps *(-2)*ks**2*ps*(7*ks*xs + ps*(3-10*xs**2 ) )/denom**2 # b1
                 res[2][1] += f**2*ks/14/ps *7*ks*(ks-2*ps*xs)*(ks**2+2*ps**2-2*ks*ps*xs)/denom**2 # b1^2 
                 res[3][1] += f**2*ks/14/ps *(-14)*ps**2/denom # b2
+                res[6][1] += f**2*ks/3 * -1 * ps*(4*ps**2+2*ks*(-4*ps*xs+ks*(3*xs**2-1)))/denom**2 # bs
 
                 res[0][3] += f**3*ks**3/7/ps * ps*(ps-7*ks*xs+6*ps*xs**2)/denom**2 # 1
                 res[1][3] += f**3*ks**3/7/ps * 7/denom # b1
 
-                # res[0,:,5] += f**4 * ks**5/ (2*ps * denom**2) # 1
-                
+                # 
+                # res[0][5] += f**4*ks**5/(2*ps*denom**2) # 1
             elif n==4:
                 res[1][0] += f**2*ps/14 * ks**2*(7*ks*xs+ps*(3-10*xs**2))/denom**2 # b1
                 res[3][0] += f**2*ps/14 * 7*ps/denom # b2
+                res[6][0] += f**2*ps**2/6 * (4*ps**2+2*ks*(-4*ps*xs+ks*(3*xs**2-1)))/denom**2 # bs
 
                 res[0][2] += -f**3*ks**2/14*ps*(ps-7*ks*xs+6*ps*xs**2)/denom**2 # 1
                 res[1][2] += -f**3*ks**2/14*7*(ps**2 + 3*ks*(ks-2*ps*xs))/denom**2 # b1
@@ -612,9 +654,7 @@ class mark:
                 res[0][3] += (3*f**4*ks**3*ps/(2*denom**2)) # 1
 
             elif n==6:
-                res[0][0] += (-f**4*ks**2*ps**2/(2*denom**2)) # 1
-                
-                # res[:,0]+= (-f**4*ks**2*ps**2/(2*denom**2))
+                res[0][2] += (-f**4*ks**2*ps**2/(2*denom**2)) # 1
         else:
             c0 = alpha0 / (2*b1) # stoch
             c1 = (alpha2/2 - c0 *f)/b1
@@ -656,7 +696,8 @@ class mark:
         res = np.zeros(x.shape)
         n,m = round(n),round(m)
         for l in range(0,n+1):
-            res+= (1+(-1)**(l+n))*(2*l+1)*binom(l,m)*binom((l+m-1)/2,l)*2**(2*l)*gamma(n+1)\
+            if round(l+n)%2 != 0: continue
+            res+= (1+(-1)**(round(l+n)))*(2*l+1)*binom(l,m)*binom((l+m-1)/2,l)*2**(2*l)*gamma(n+1)\
                 *gamma((n+l)/2+2)\
                 *legendre(l)(x)/(gamma((n-l)/2+1)*gamma(n+l+3))
         return res
@@ -672,7 +713,7 @@ class mark:
         
         Nskip = self.Nskip
         
-        final_array = np.zeros((5,len(mu_pow),self.nk,len(p))) #powers of mu
+        final_array = np.zeros((8,len(mu_pow),self.nk,len(p))) #powers of mu
 
         mu_pows = np.arange(np.max(mu_pow)+1)
 
@@ -709,7 +750,7 @@ class mark:
                     
                     for i in range(np.max(mu_pow)+1):
                         if m+i>np.max(mu_pow) or (m+i)%2!=0: continue
-                        final_array[:5,round((m+i)/2),ii*Nskip:(ii+1)*Nskip,:]+=integral_px[:,i,:,:] # bias length is different 
+                        final_array[:8,round((m+i)/2),ii*Nskip:(ii+1)*Nskip,:]+=integral_px[:,i,:,:] # bias length is different 
                     del integral_px
                 del zn
             del ks; del ps; del xs; del S_int
@@ -740,7 +781,7 @@ class mark:
             c1 = 0
         # load tables
         tmp = os.path.join(self.basedir,name)
-        if not os.path.exists(tmp) and write: os.makedirs(tmp)
+        if not os.path.exists(tmp) and write: os.makedirs(tmp,exist_ok=True)
         
         tmp = os.path.join(self.basedir, name, "integral13%s.json"%stoch_str)
         if os.path.exists(tmp):
@@ -867,7 +908,7 @@ class mark:
             ks, ps, xs = np.meshgrid(k, p,x,indexing='ij',copy=False)
             Yint = Y_func(np.sqrt(ks**2+ps**2-2*ks*ps*xs))
             for n in range(np.max(mu_pow)+1):
-                zn = self.get_zn_22(n,f,ks,mu_pows,ps,xs,stoch=stoch) 
+                zn = self.get_zn_22(n,f,ks,mu_pows,ps,xs,stoch=stoch)
                 for m in range(n+1):
                     Gnm = self.get_Gnm(n,m)
                     if np.max(np.abs(Gnm))<1e-15: 
@@ -910,7 +951,7 @@ class mark:
         if stoch:    stoch_str = '_stoch'
         else: stoch_str = ''
         tmp = os.path.join(self.basedir,name)
-        if not os.path.exists(tmp) and write: os.makedirs(tmp)
+        if not os.path.exists(tmp) and write: os.makedirs(tmp,exist_ok=True)
         tmp = os.path.join(self.basedir, name, "integral22_W%s.json"%stoch_str)
         if os.path.exists(tmp):
             with open(os.path.join(self.basedir, name, "integral22_W%s.json"%stoch_str)) as json_file:
@@ -961,7 +1002,7 @@ class mark:
         C1C2_contr = 4 * np.einsum('j,kij->kij',W_R,(subintegral22_3))
         M22B_table[:,5] += C1C2_contr
 
-        return M22B_table    
+        return M22B_table   
 
     def compute_stoch_dof_table(self,f,stoch=False):
         # bispectrum stochastic piece proportional to new dof Bshot
@@ -984,64 +1025,64 @@ class mark:
         plin_IR_leg = self.plin_IR_leg
         plin_IR_poly = self.plin_IR_poly
         R = self.R
-        mu_pows, ks, ps = np.meshgrid(mu_pow,kv, p,indexing='ij',copy=False)
+        # mu_pows, ks, ps = np.meshgrid(mu_pow,kv, p,indexing='ij',copy=False)
+        ks, ps = np.meshgrid(kv, p,indexing='ij',copy=False)
         
+        # we will perform 1/(2pi)^3 at the end
+
+        # first get the easy terms that require only p-integration
+        # terms p1 and k2 in .nb
+        p1int = simps(x=p,y= p**2 * plin_p * W_R_int) * 4 * np.pi /3 
+        k2int = simps(x=p,y= p**2 * W_R_int) * 4 * np.pi
+
+
+        # now the hard ones for p23 and k1
         var_int = ks*ps*R**2
-        
-        int_st0 = np.zeros((len(mu_pow),self.nk,len(self.kint)))
-        int_st2 = np.zeros((len(mu_pow),self.nk,len(self.kint)))
-        int_st4 = np.zeros((len(mu_pow),self.nk,len(self.kint)))
 
-        # hyperbolic functions with cutoff
+        # all terms are proportional to this hyperbolic functions with cutoff
         # sinh(kpR^2) W_R(p) W_R(k)
-        # np.exp(-(self.kint/self.cutoff)**2)
-        sinh_cut = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)-np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
-        cosh_cut = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)+np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
-        
-        # int_x e^kpxR^2 G_nm(x) mu_p^n dx/2 for int_stn
-        # 2pi factor absorbed (later) by 1/2pi^3
-        int_st0[0] += (sinh_cut/var_int)[0]
-        
-        int_st2[0] += ((var_int*cosh_cut - sinh_cut)/var_int**3)[0]
-        int_st2[1] += ((-3*var_int*cosh_cut + (3+var_int**2)*sinh_cut  )/var_int**3)[0]
+        sinhWpWk = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)-np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
+        coshWpWk = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)+np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
 
-        int_st4[0] += ((-9*var_int*cosh_cut + 3*(3+var_int**2)*sinh_cut   )/var_int**5)[0]
-        int_st4[1] += (6* (var_int*(15+var_int**2)*cosh_cut -3*(5+2*var_int**2)*sinh_cut  )/var_int**5)[0]
-        int_st4[2] += ((-5*var_int*(21+2*var_int**2)*cosh_cut + (105+45*var_int**2+var_int**4)*sinh_cut )/var_int**5)[0]
-        
-        plin_ps = interp1d(self.kint,self.plin_p)(ps)
-        
-        # W_R(p) W_R(k) included in int_st 
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R(p) dp/2pi**2 dx/2 for int_stn
-        int_P_0 = simps(x=p,y=ps[:,:,:]**2*(int_st0 )*plin_ps /(2*np.pi**2),axis=2)
-        int_P_2 = simps(x=p,y=ps[:,:,:]**2*(int_st2 )*plin_ps /(2*np.pi**2),axis=2)
-        # int_P_4 = simps(x=p,y=ps[:,:,:]**2*(int_st4 )*plin_ps /(2*np.pi**2),axis=2)
+        # mu^0 term of p2 integrand with no nuisance param
+        p2integrand_mu0 = (4*np.pi/var_int**3)*(f*var_int*coshWpWk - f*sinhWpWk)
+        p2integrand_mu0 = np.einsum('jk,k->jk',p2integrand_mu0,plin_p*p**2)
 
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R^2(p) dp/2pi**2 dx/2 for int_stn
-        int_WP_0 = simps(x=p,y=ps[:,:,:]**2*(int_st0 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        int_WP_2 = simps(x=p,y=ps[:,:,:]**2*(int_st2 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        # int_WP_4 = simps(x=p,y=ps[:,:,:]**2*(int_st4 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R(p) dp/2pi**2 dx/2 for int_stn
-        # int_Pp2_0 = simps(x=p,y=ps[:,:,:]**4*(int_st0 )*plin_ps /(2*np.pi**2),axis=2)
-        # int_Pp2_2 = simps(x=p,y=ps[:,:,:]**4*(int_st2 )*plin_ps /(2*np.pi**2),axis=2)
-        # int_Pp2_4 = simps(x=p,y=ps[:,:,:]**4*(int_st4 )*plin_ps /(2*np.pi**2),axis=2)
-        
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R(p) dp/2pi**2 dx/2 for int_stn
-        # int_WPp2_0 = simps(x=p,y=ps[:,:,:]**4*(int_st0 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        # int_WPp2_2 = simps(x=p,y=ps[:,:,:]**4*(int_st2 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        # int_WPp2_4 = simps(x=p,y=ps[:,:,:]**4*(int_st4 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        
-        # int_x e^kpxR^2 G_nm(x) mu_p^n W_R^2(p) dp/2pi**2 dx/2 for int_stn
-        int_W_0 = simps(x=p,y=ps[:,:,:]**2*(int_st0 )*W_R_int /(2*np.pi**2),axis=2)
-        # int_W_2 = simps(x=p,y=ps[:,:,:]**2*(int_st2 )*W_R_int/(2*np.pi**2),axis=2)
-        # int_W_4 = simps(x=p,y=ps[:,:,:]**2*(int_st4 )*W_R_int /(2*np.pi**2),axis=2)
-        
-        int_1_0 = np.zeros((len(mu_pow),self.nk))
-        # W_R(p) W_R(k) inclusion for int_st doesn't apply here
-        # int_x e^kpxR^2 G_nm(x) mu_p^n W_R(p) dp/2pi**2 dx/2 for int_stn
-        int_1_0[0] = simps(x=p,y=ps[:,:,:]**2 *W_R_int /(2*np.pi**2),axis=2)[0]
-                
+        # mu^0 term of p2 integrand proportional to b
+        p2integrand_mu0_b =(4*np.pi/var_int**3)* (var_int**2*sinhWpWk)
+        p2integrand_mu0_b = np.einsum('jk,k->jk',p2integrand_mu0_b,plin_p*p**2)
+
+        # p3 is just p2 * 2 * W_R(p)
+        p3integrand_mu0 = np.einsum('jk,k->jk',p2integrand_mu0,2*W_R_int)
+        p3integrand_mu0_b = np.einsum('jk,k->jk',p2integrand_mu0_b,2*W_R_int)
+
+        # perform integration and delete integrands
+        p2int_mu0 = simps(x=p,y=p2integrand_mu0,axis=1)
+        p2int_mu0_b = simps(x=p,y=p2integrand_mu0_b,axis=1)
+        p3int_mu0 = simps(x=p,y=p3integrand_mu0,axis=1)
+        p3int_mu0_b = simps(x=p,y=p3integrand_mu0_b,axis=1)
+        del p2integrand_mu0, p2integrand_mu0_b, p3integrand_mu0, p3integrand_mu0_b
+
+        # mu^2 term of p2 integrand
+        p2integrand_mu2 = (4*np.pi/var_int**3)*f*(-3*var_int*coshWpWk + (3+var_int**2)*sinhWpWk)
+        p2integrand_mu2 = np.einsum('jk,k->jk',p2integrand_mu2,plin_p*p**2)
+        # again, p3 is just p2 * 2 * W_R(p)
+        p3integrand_mu2 = np.einsum('jk,k->jk',p2integrand_mu2,2*W_R_int)
+
+        # again perform integration and delete integrands
+        p2int_mu2 = simps(x=p,y=p2integrand_mu2,axis=1)
+        p3int_mu2 = simps(x=p,y=p3integrand_mu2,axis=1)
+        del p2integrand_mu2, p3integrand_mu2
+
+        # finally, k1
+        k1integrand = 4*np.pi*sinhWpWk/(var_int)
+        k1integrand = np.einsum('jk,k->jk',k1integrand,W_R_int*p**2)
+
+        # perform integration and delete integrand
+        k1int = simps(x=p,y=k1integrand,axis=1)
+        del k1integrand
+
+        # now assemble the full contributions                
         # 1, b1, b1^2, b2, b1b2, b2^2, bs, b1bs, b2bs, bs^2, b3, b1 b3
         # b1^3, b1^4, b1^2 b2, b1^2 bs
         # sn, sn2, sn4, alpha0, alpha2, alpha4
@@ -1050,32 +1091,42 @@ class mark:
         # b1 bshot, b1^2 bshot, b0
         # nm0, nm2
         
-        #C0 C1
-        temp_A = [np.polymul((int_1_0[:,i]),plin_IR_poly[:,i])[:len(mu_pow)] for i in range(len(kv))]
-        temp_A = np.array(temp_A).T
-
+        # C0 C1
+        # first get contributions with no plin(k) 
         C0C1_contr = np.zeros((33,len(mu_pow),self.nk))
-        C0C1_contr[32] += 2*temp_A  # b1^2 bshot
-        C0C1_contr[31,1:] = f*2*temp_A[:-1]  # b1 bshot
+        # p1 term 
+        C0C1_contr[31,0] += f * p1int  # b1 bshot
+        C0C1_contr[32,0] += 3 * p1int  # b1^2 bshot
 
-        C0C1_contr[32] += (1+W_R) * int_P_0 # b1^2 bshot
-        C0C1_contr[31] += f* (1+W_R) * int_P_2 # b1 bshot
-                
-        #C1 C1
+        # p2 term
+        C0C1_contr[31,0] += p2int_mu0 # b1 bshot
+        C0C1_contr[32,0] += p2int_mu0_b  # b1^2 bshot
+        C0C1_contr[31,1] += p2int_mu2  # b1 bshot
+
+        # k2 term
+        k2contr = k2int * plin_IR_poly
+        C0C1_contr[32] += k2contr  # b1^2 bshot
+        C0C1_contr[31,1:] += f * k2contr[:-1]  # b1 bshot
+
+
+        # C1 C1
         C1C1_contr = C0C1_contr*W_R
-        
-        #C0 C2
-        temp_A = [np.polymul((int_W_0[:,i]),plin_IR_poly[:,i])[:len(mu_pow)] for i in range(len(kv))]
-        temp_A = np.array(temp_A).T
-        
-        C0C2_contr = np.zeros((33,len(mu_pow),self.nk))
-        C0C2_contr[32] += 2*temp_A  # b1^2 bshot
-        C0C2_contr[31,1:] = f*2*temp_A[:-1]  # b1 bshot
 
-        C0C2_contr[32] += 2 * int_WP_0 # b1^2 bshot
-        C0C2_contr[31] += 2 * f * int_WP_2 # b1 bshot
-        
-        #C1 C2
+        # C0 C2
+        C0C2_contr = np.zeros((33,len(mu_pow),self.nk))
+        # p3 term
+        C0C2_contr[31,0] += p3int_mu0  # b1 bshot
+        C0C2_contr[32,0] += p3int_mu0_b  # b1^2 bshot
+        C0C2_contr[31,1] += p3int_mu2  # b1 bshot
+
+        # k1 term
+        # k1contr = k1int * plin_IR_poly
+        # k1contr = np.array([np.polymul((k1int[:,i]),plin_IR_poly[:,i])[:len(mu_pow)] for i in range(len(kv))]).T
+        k1contr = np.einsum('k,jk->jk',k1int,plin_IR_poly)
+        C0C2_contr[32] += k1contr  # b1^2 bshot
+        C0C2_contr[31,1:] += f * k1contr[:-1]  # b1 bshot
+
+        # C1 C2
         C1C2_contr = C0C2_contr*W_R
         
         # C_0^2, C_0 C_1, C_0 C_2, C_0 C_3, C_1^2, C_1 C_2, C_1 C_3, C_2^2, C_2 C_3
@@ -1085,8 +1136,11 @@ class mark:
         final_array[:,2]+=C0C2_contr
         final_array[:,5]+=C1C2_contr
                 
-        final_array *= 4 # contribution same between M22 and M13, so final is M22+2 M13 = 4 M13
-        
+        # MPS has 2x contribution of bispectrum
+        final_array *= 2
+
+        final_array /= (2*np.pi)**3 # 1/(2pi)^3 factor from integral of p
+
         return final_array
     
     def compute_stoch_BSN_table(self,f):
@@ -1199,63 +1253,75 @@ class mark:
         plin_IR_poly = self.plin_IR_poly
         R = self.R
         mu_pows, ks, ps = np.meshgrid(mu_pow,kv, p,indexing='ij',copy=False)
-        var_int = ks*ps*R**2
+        ks, ps = np.meshgrid(kv, p,indexing='ij',copy=False)
+        
+        # we will perform 1/(2pi)^3 at the end
 
-        int_st0 = np.zeros((len(mu_pow),self.nk,len(self.kint)))
-        int_st2 = np.zeros((len(mu_pow),self.nk,len(self.kint)))
-        int_st4 = np.zeros((len(mu_pow),self.nk,len(self.kint)))
+        # first get the easy terms that require only p-integration
+        # terms p1 and k2 in .nb
+        # these are the same integrals as Bshot, although the coefficient for p1 is different
+        p1int = simps(x=p,y= p**2 * plin_p * W_R_int) * 4 * np.pi /15 
+        k2int = simps(x=p,y= p**2 * W_R_int) * 4 * np.pi
+
+        var_int = ks*ps*R**2
         
         # hyperbolic functions with cutoff
         # sinh(kpR^2) W_R(p) W_R(k)
         # np.exp(-(self.kint/self.cutoff)**2)
-        sinh_cut = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)-np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
-        cosh_cut = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)+np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
+        sinhWpWk = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)-np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
+        coshWpWk = 0.5*(np.exp(var_int-ps**2*R**2/2-ks**2*R**2/2)+np.exp(-var_int-ps**2*R**2/2-ks**2*R**2/2))
         
-        # int_x e^kpxR^2 G_nm(x) mu_p^n dx/2 for int_stn
-        # 2pi factor absorbed (later) by 1/2pi^3
-        int_st0[0] += (sinh_cut/var_int)[0]
-        
-        int_st2[0] += ((var_int*cosh_cut - sinh_cut)/var_int**3)[0]
-        int_st2[1] += ((-3*var_int*cosh_cut + (3+var_int**2)*sinh_cut  )/var_int**3)[0]
+        # mu^0 term of p2 integrand with no nuisance param
+        p2_integrand_mu0 = (4*np.pi/var_int**5)*(-9*f*var_int*coshWpWk +f*(9+3*var_int**2)*sinhWpWk)
+        p2_integrand_mu0 = np.einsum('jk,k->jk',p2_integrand_mu0,plin_p*p**2)
+        # mu^0 term of p2 integrand proportional to b
+        p2_integrand_mu0_b = (4*np.pi/var_int**5)*(var_int**2)*(var_int*coshWpWk - sinhWpWk)
+        p2_integrand_mu0_b = np.einsum('jk,k->jk',p2_integrand_mu0_b,plin_p*p**2)
 
-        int_st4[0] += ((-9*var_int*cosh_cut + 3*(3+var_int**2)*sinh_cut   )/var_int**5)[0]
-        int_st4[1] += (6* (var_int*(15+var_int**2)*cosh_cut -3*(5+2*var_int**2)*sinh_cut  )/var_int**5)[0]
-        int_st4[2] += ((-5*var_int*(21+2*var_int**2)*cosh_cut + (105+45*var_int**2+var_int**4)*sinh_cut )/var_int**5)[0]
-        
-        plin_ps = interp1d(self.kint,self.plin_p)(ps)
-        plin_ps = self.plin_p
-        
-        # W_R(p) W_R(k) included in int_st 
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R(p) dp/2pi**2 dx/2 for int_stn
-        # int_P_0 = simps(x=p,y=ps[:,:,:]**2*(int_st0 )*plin_ps /(2*np.pi**2),axis=2)
-        int_P_2 = simps(x=p,y=ps[:,:,:]**2*(int_st2 )*plin_ps /(2*np.pi**2),axis=2)
-        int_P_4 = simps(x=p,y=ps[:,:,:]**2*(int_st4 )*plin_ps /(2*np.pi**2),axis=2)
+        # p3 is just p2 * 2 * W_R(p)
+        p3_integrand_mu0 = np.einsum('jk,k->jk',p2_integrand_mu0,2*W_R_int)
+        p3_integrand_mu0_b = np.einsum('jk,k->jk',p2_integrand_mu0_b,2*W_R_int)
 
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R^2(p) dp/2pi**2 dx/2 for int_stn
-        # int_WP_0 = simps(x=p,y=ps[:,:,:]**2*(int_st0 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        int_WP_2 = simps(x=p,y=ps[:,:,:]**2*(int_st2 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        int_WP_4 = simps(x=p,y=ps[:,:,:]**2*(int_st4 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R(p) dp/2pi**2 dx/2 for int_stn
-        # int_Pp2_0 = simps(x=p,y=ps[:,:,:]**4*(int_st0 )*plin_ps /(2*np.pi**2),axis=2)
-        # int_Pp2_2 = simps(x=p,y=ps[:,:,:]**4*(int_st2 )*plin_ps /(2*np.pi**2),axis=2)
-        # int_Pp2_4 = simps(x=p,y=ps[:,:,:]**4*(int_st4 )*plin_ps /(2*np.pi**2),axis=2)
-        
-        # int_x e^kpxR^2 G_nm(x) mu_p^n P_L(p) W_R(p) dp/2pi**2 dx/2 for int_stn
-        # int_WPp2_0 = simps(x=p,y=ps[:,:,:]**4*(int_st0 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        # int_WPp2_2 = simps(x=p,y=ps[:,:,:]**4*(int_st2 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        # int_WPp2_4 = simps(x=p,y=ps[:,:,:]**4*(int_st4 )*plin_ps*W_R_int /(2*np.pi**2),axis=2)
-        
-        # int_x e^kpxR^2 G_nm(x) mu_p^n W_R^2(p) dp/2pi**2 dx/2 for int_stn
-        int_W_0 = simps(x=p,y=ps[:,:,:]**2*(int_st0 )*W_R_int /(2*np.pi**2),axis=2)
-        # int_W_2 = simps(x=p,y=ps[:,:,:]**2*(int_st2 )*W_R_int/(2*np.pi**2),axis=2)
-        # int_W_4 = simps(x=p,y=ps[:,:,:]**2*(int_st4 )*W_R_int /(2*np.pi**2),axis=2)
-        
-        int_1_0 = np.zeros((len(mu_pow),self.nk))
-        # W_R(p) W_R(k) inclusion for int_st doesn't apply here
-        # int_x e^kpxR^2 G_nm(x) mu_p^n W_R(p) dp/2pi**2 dx/2 for int_stn
-        int_1_0[0] = simps(x=p,y=ps[:,:,:]**2 *W_R_int /(2*np.pi**2),axis=2)[0]
+        # perform integration and delete integrands
+        p2int_mu0 = simps(x=p,y=p2_integrand_mu0,axis=1)
+        p2int_mu0_b = simps(x=p,y=p2_integrand_mu0_b,axis=1)
+        p3int_mu0 = simps(x=p,y=p3_integrand_mu0,axis=1)
+        p3int_mu0_b = simps(x=p,y=p3_integrand_mu0_b,axis=1)
+        del p2_integrand_mu0, p2_integrand_mu0_b, p3_integrand_mu0, p3_integrand_mu0_b
 
+        # mu^2 term of p2 integrand
+        p2_integrand_mu2 = (4*np.pi/var_int**5)*f*(var_int*6*(15+var_int**2)*coshWpWk + (-90-36*var_int**2)*sinhWpWk)
+        p2_integrand_mu2 = np.einsum('jk,k->jk',p2_integrand_mu2,plin_p*p**2)
+        p2_integrand_mu2_b = (4*np.pi/var_int**5)*(-3*var_int**3*coshWpWk+var_int**2*(3+var_int**2)*sinhWpWk)
+        p2_integrand_mu2_b = np.einsum('jk,k->jk',p2_integrand_mu2_b,plin_p*p**2)
+        # again, p3 is just p2 * 2 * W_R(p)
+        p3_integrand_mu2 = np.einsum('jk,k->jk',p2_integrand_mu2,2*W_R_int)
+        p3_integrand_mu2_b = np.einsum('jk,k->jk',p2_integrand_mu2_b,2*W_R_int)
+
+        # again perform integration and delete integrands
+        p2int_mu2 = simps(x=p,y=p2_integrand_mu2,axis=1)
+        p2int_mu2_b = simps(x=p,y=p2_integrand_mu2_b,axis=1)
+        p3int_mu2 = simps(x=p,y=p3_integrand_mu2,axis=1)
+        p3int_mu2_b = simps(x=p,y=p3_integrand_mu2_b,axis=1)
+        del p2_integrand_mu2, p2_integrand_mu2_b, p3_integrand_mu2, p3_integrand_mu2_b
+
+        p2_integrand_mu4 = (4*np.pi/var_int**5)*f*(-5*var_int*(21+2*var_int**2)*coshWpWk + (105+45*var_int**2+var_int**4)*sinhWpWk)
+        p2_integrand_mu4 = np.einsum('jk,k->jk',p2_integrand_mu4,plin_p*p**2)
+
+        p3_integrand_mu4 = np.einsum('jk,k->jk',p2_integrand_mu4,2*W_R_int)
+
+        p2int_mu4 = simps(x=p,y=p2_integrand_mu4,axis=1)
+        p3int_mu4 = simps(x=p,y=p3_integrand_mu4,axis=1)
+        del p2_integrand_mu4, p3_integrand_mu4
+
+        # finally, k1
+        k1integrand = 4*np.pi*sinhWpWk/(var_int)
+        k1integrand = np.einsum('jk,k->jk',k1integrand,W_R_int*p**2)
+
+        k1int = simps(x=p,y=k1integrand,axis=1)
+        del k1integrand
+
+        # now assemble the full contributions                
         # 1, b1, b1^2, b2, b1b2, b2^2, bs, b1bs, b2bs, bs^2, b3, b1 b3
         # b1^3, b1^4, b1^2 b2, b1^2 bs
         # sn, sn2, sn4, alpha0, alpha2, alpha4
@@ -1263,34 +1329,43 @@ class mark:
         # sn^2, b1 sn^2, b1^2 sn^2, b1^3 sn^2, b1^4 sn^2 
         # b1 bshot, b1^2 bshot, b0
         # nm0, nm2
-        
-        #C0 C1
-        temp_A = [np.polymul((int_1_0[:,i]),plin_IR_poly[:,i])[:len(mu_pow)] for i in range(len(kv))]
-        temp_A = np.array(temp_A).T
+
+        # C0C1
         C0C1_contr = np.zeros((33,len(mu_pow),self.nk))
+        # p1 term
+        C0C1_contr[16,0] += 3 * f * p1int  # sn
+        C0C1_contr[22,0] += 5 * p1int  # b1 sn
+        # p2 term
+        C0C1_contr[16,0] += p2int_mu0 # sn
+        C0C1_contr[22,0] += p2int_mu0_b  # b1 sn
+        C0C1_contr[16,1] += p2int_mu2  # sn
+        C0C1_contr[22,1] += p2int_mu2_b  # b1 sn
+        C0C1_contr[16,2] += p2int_mu4  # sn
 
-        C0C1_contr[22,1:] += (4*f*temp_A)[:-1] # b1 sn
-        C0C1_contr[16,2:] += (4*f**2*temp_A)[:-2] # sn
+        # k2 term
+        k2contr = k2int * plin_IR_poly
+        C0C1_contr[22,1:] += k2contr[:-1]  # b1 sn
+        C0C1_contr[16,2:] += f * k2contr[:-2]  # sn
 
-        C0C1_contr[22] += 2*f*(1+W_R)*int_P_2 # b1 sn
-        C0C1_contr[16] += 2*f**2*(1+W_R)*int_P_4 # sn
-
-        #C1 C1
+        # C1 C1
         C1C1_contr = C0C1_contr*W_R
-        
-        #C0 C2
-        temp_A = [np.polymul((int_W_0[:,i]),plin_IR_poly[:,i])[:len(mu_pow)] for i in range(len(kv))]
-        temp_A = np.array(temp_A).T
+
+        # C0 C2
         C0C2_contr = np.zeros((33,len(mu_pow),self.nk))
+        # p3 term
+        C0C2_contr[16,0] += p3int_mu0  # sn
+        C0C2_contr[22,0] += p3int_mu0_b  # b1 sn
+        C0C2_contr[16,1] += p3int_mu2  # sn
+        C0C2_contr[22,1] += p3int_mu2_b  # b1 sn
+        C0C2_contr[16,2] += p3int_mu4  # sn
+        # k1 term
+        # k1contr = k1int * plin_IR_poly
+        # k1contr = np.array([np.polymul((k1int[:,i]),plin_IR_poly[:,i])[:len(mu_pow)] for i in range(len(kv))]).T
+        k1contr = np.einsum('k,jk->jk',k1int,plin_IR_poly)
+        C0C2_contr[22,1:] += k1contr[:-1]  # b1 sn
+        C0C2_contr[16,2:] += f * k1contr[:-2]  # sn
 
-        C0C2_contr[22,1:] += (4*f*temp_A)[:-1] # b1 sn
-        C0C2_contr[16,2:] += (4*f**2*temp_A)[:-2] # sn
-
-        C0C2_contr[22] += 4*f*int_WP_2 # b1 sn
-        C0C2_contr[16] += 4*f**2*int_WP_4 # sn
-        
-
-        #C1 C2
+        # C1 C2
         C1C2_contr = C0C2_contr*W_R
 
         # C_0^2, C_0 C_1, C_0 C_2, C_0 C_3, C_1^2, C_1 C_2, C_1 C_3, C_2^2, C_2 C_3
@@ -1300,18 +1375,32 @@ class mark:
         final_array[:,2]+=C0C2_contr
         final_array[:,5]+=C1C2_contr
         
-        final_array *= 4 # contribution same between M22 and M13, so final is M22+2 M13 = 4 M13
+        # MPS has 2x contribution of bispectrum
+        final_array *= 2
         
+        final_array /= (2*np.pi)**3 # 1/(2pi)^3 factor from integral of p
+
+        # multiply by f at the end to account for N*f throughout
+        # change from 2N in Ivanov+2022 to 1N in Chudaykin+2025 and Bakx+2025
+        final_array *= f
+
         return final_array
 
     def get_Nm_contr(self,pars,Cn=None,Cn2=None):
         # polynomial basis
         b1, b2, bs, b3, alpha0, alpha2, alpha4, alpha6, sn, sn2, sn4,bshot, b0, nm0, nm2, db, df = pars
 
+
+        if self.Nm_dict is not None:
+            if self.Nm_dict['Cn']==Cn and self.Nm_dict['Cn2']==Cn2:
+                return self.Nm_dict['Nm_contr']
+
         kv = self.kv
         final_array = np.zeros((len(self.mu_pow),self.nk))
         final_array[0] += nm0 * kv**2 *(self.Cd(kv,Cn=Cn)+self.Cd(kv,Cn=Cn2))/2
         final_array[1] += nm2 * kv**2 *(self.Cd(kv,Cn=Cn)+self.Cd(kv,Cn=Cn2))/2
+
+        self.Nm_dict = {'Nm_contr': final_array, 'Cn': Cn, 'Cn2': Cn2}
         
         return final_array
         
